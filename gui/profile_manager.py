@@ -2,13 +2,12 @@
 """
 Interfaz gráfica para gestión de perfiles de búsqueda con programación automática.
 Permite crear, editar, eliminar perfiles y configurar búsquedas automáticas programadas.
-Incluye actualizaciones en tiempo real del estado del programador.
 """
 
 # Archivos relacionados: services/profile_service.py, services/email_search_service.py, services/config_service.py, services/scheduler_service.py, gui/scheduler_modal.py
 
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 import threading
 from services.profile_service import ProfileService
 from services.email_search_service import EmailSearchService
@@ -109,7 +108,7 @@ class ProfileManager:
         # Frame para controles del programador
         controls_frame = ttk.Frame(scheduler_frame)
         controls_frame.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        controls_frame.grid_columnconfigure(3, weight=1)
+        controls_frame.grid_columnconfigure(2, weight=1)
 
         # Botones de control
         self.start_scheduler_button = ttk.Button(controls_frame, text="▶️ Iniciar",
@@ -120,15 +119,10 @@ class ProfileManager:
                                                 command=self.stop_scheduler, width=10)
         self.stop_scheduler_button.grid(row=0, column=1, padx=5)
 
-        # Botón de historial
-        self.history_button = ttk.Button(controls_frame, text="📜 Historial",
-                                         command=self.show_execution_history, width=10)
-        self.history_button.grid(row=0, column=2, padx=5)
-
         # Label de próxima ejecución
         self.next_execution_label = ttk.Label(controls_frame, text="",
                                               foreground="blue", font=("Arial", 9))
-        self.next_execution_label.grid(row=0, column=4, sticky="e")
+        self.next_execution_label.grid(row=0, column=3, sticky="e")
 
         # Actualizar estado inicial
         self.update_scheduler_status_display()
@@ -345,88 +339,6 @@ class ProfileManager:
             error_msg = self.clean_string(str(e))
             self.show_info(f"❌ Error deteniendo programador: {error_msg}", "error")
 
-    def show_execution_history(self):
-        """Muestra el historial de ejecuciones automáticas"""
-        try:
-            history = self.scheduler_service.get_execution_history(20)
-
-            if not history:
-                messagebox.showinfo("Historial", "No hay ejecuciones automáticas registradas")
-                return
-
-            # Crear ventana de historial
-            history_window = tk.Toplevel(self.parent)
-            history_window.title("Historial de Ejecuciones Automáticas")
-            history_window.geometry("600x400")
-            history_window.transient(self.parent)
-            history_window.grab_set()
-
-            # Centrar ventana
-            history_window.update_idletasks()
-            x = (history_window.winfo_screenwidth() // 2) - (600 // 2)
-            y = (history_window.winfo_screenheight() // 2) - (400 // 2)
-            history_window.geometry(f"600x400+{x}+{y}")
-
-            # Frame principal
-            main_frame = ttk.Frame(history_window, padding="15")
-            main_frame.pack(fill="both", expand=True)
-
-            # Título
-            title_label = ttk.Label(main_frame, text="📜 Historial de Ejecuciones Automáticas",
-                                    font=("Arial", 14, "bold"))
-            title_label.pack(pady=(0, 15))
-
-            # Lista de historial
-            list_frame = ttk.Frame(main_frame)
-            list_frame.pack(fill="both", expand=True, pady=(0, 15))
-
-            columns = ("timestamp", "profiles", "emails", "status")
-            history_tree = ttk.Treeview(list_frame, columns=columns, show="headings")
-
-            history_tree.heading("timestamp", text="Fecha y Hora")
-            history_tree.heading("profiles", text="Perfiles")
-            history_tree.heading("emails", text="Correos Encontrados")
-            history_tree.heading("status", text="Estado")
-
-            history_tree.column("timestamp", width=150, anchor="w")
-            history_tree.column("profiles", width=100, anchor="center")
-            history_tree.column("emails", width=120, anchor="center")
-            history_tree.column("status", width=150, anchor="center")
-
-            # Scrollbar
-            scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=history_tree.yview)
-            history_tree.configure(yscrollcommand=scrollbar.set)
-
-            history_tree.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-
-            # Agregar datos del historial (más recientes primero)
-            for record in reversed(history):
-                timestamp = record.get("timestamp", "")
-                successful = record.get("successful_profiles", 0)
-                failed = record.get("failed_profiles", 0)
-                total_profiles = record.get("total_profiles", successful + failed)
-                emails = record.get("total_emails", 0)
-
-                try:
-                    from datetime import datetime
-                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    formatted_time = dt.strftime("%d/%m/%Y %H:%M:%S")
-                except Exception:
-                    formatted_time = timestamp
-
-                profiles_str = f"{successful}/{total_profiles}"
-                status_str = "✓ Éxito" if successful > 0 else "⚠ Sin resultados" if failed == 0 else "✗ Error"
-
-                history_tree.insert("", "end", values=(formatted_time, profiles_str, emails, status_str))
-
-            # Botón cerrar
-            ttk.Button(main_frame, text="Cerrar", command=history_window.destroy).pack()
-
-        except Exception as e:
-            error_msg = self.clean_string(str(e))
-            messagebox.showerror("Error", f"Error mostrando historial: {error_msg}")
-
     def update_scheduler_status_display(self):
         """Actualiza la visualización del estado del programador"""
         try:
@@ -604,7 +516,6 @@ class ProfileManager:
             if hasattr(self, 'manual_search_button'):
                 self.manual_search_button.config(state="normal", text="🔍 Buscar Ahora")
 
-    # Métodos para gestión de perfiles (sin cambios significativos)
     def get_selected_profile_id(self):
         """Obtiene el profile_id del item seleccionado"""
         selected = self.profiles_tree.selection()

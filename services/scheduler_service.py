@@ -262,9 +262,6 @@ class SchedulerService:
                     failed_profiles += 1
                     print(f"DEBUG: Perfil {profile_id} - Error: {result.get('message', 'Unknown')}")
 
-            # Registrar ejecución en historial
-            self._log_execution(successful_profiles, failed_profiles, total_emails)
-
             # Preparar mensaje de resultado
             success_message = f"Búsqueda automática completada: {successful_profiles}/{len(results)} perfiles exitosos, {total_emails} correos encontrados"
             print(f"DEBUG: {success_message}")
@@ -424,64 +421,6 @@ class SchedulerService:
         except Exception as e:
             print(f"Error obteniendo próxima ejecución: {e}")
             return None
-
-    def _log_execution(self, successful_profiles, failed_profiles, total_emails):
-        """Registra una ejecución en el historial"""
-        try:
-            history_file = self.config_dir / "scheduler_history.json"
-
-            # Cargar historial existente
-            history = []
-            if history_file.exists():
-                with open(history_file, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-
-            # Agregar nueva ejecución
-            execution_record = {
-                "timestamp": datetime.now().isoformat(),
-                "successful_profiles": successful_profiles,
-                "failed_profiles": failed_profiles,
-                "total_emails": total_emails,
-                "total_profiles": successful_profiles + failed_profiles
-            }
-
-            history.append(execution_record)
-
-            # Mantener solo últimas 100 ejecuciones
-            if len(history) > 100:
-                history = history[-100:]
-
-            # Guardar historial
-            with open(history_file, "w", encoding="utf-8") as f:
-                json.dump(history, f, indent=4, ensure_ascii=True)
-
-        except Exception as e:
-            print(f"Error registrando ejecución en historial: {e}")
-
-    def get_execution_history(self, limit=10):
-        """
-        Obtiene el historial de ejecuciones
-
-        Args:
-            limit (int): Límite de registros
-
-        Returns:
-            list: Historial de ejecuciones
-        """
-        try:
-            history_file = self.config_dir / "scheduler_history.json"
-
-            if not history_file.exists():
-                return []
-
-            with open(history_file, "r", encoding="utf-8") as f:
-                history = json.load(f)
-
-            # Retornar últimas ejecuciones
-            return history[-limit:] if len(history) > limit else history
-
-        except Exception:
-            return []
 
     def _validate_config(self, config):
         """
