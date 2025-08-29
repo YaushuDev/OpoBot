@@ -136,7 +136,8 @@ class ProfileManager:
                     is_active = profile.get("is_active", True)
                     status = "Activo" if is_active else "Inactivo"
 
-                    executions = stats.get("total_emails_found", 0)
+                    # CORRECCIÓN: Usar current_emails_found en lugar de total_emails_found
+                    executions = stats.get("current_emails_found", stats.get("total_emails_found", 0))
                     last_execution = stats.get("last_execution")
 
                     # Formatear fecha de última ejecución

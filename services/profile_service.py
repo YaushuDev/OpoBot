@@ -301,7 +301,7 @@ class ProfileService:
 
         Args:
             profile_id (str): ID del perfil
-            emails_found (int): Número de emails encontrados en esta ejecución
+            emails_found (int): Número de emails encontrados en esta ejecución (NO acumulativo)
         """
         try:
             # Actualizar fecha de última ejecución en el perfil
@@ -319,14 +319,18 @@ class ProfileService:
             if profile_id not in stats:
                 stats[profile_id] = {
                     "total_executions": 0,
-                    "total_emails_found": 0,
+                    "current_emails_found": 0,
+                    "total_emails_accumulated": 0,
                     "last_execution": None,
                     "execution_history": []
                 }
 
             # Actualizar estadísticas
             stats[profile_id]["total_executions"] += 1
-            stats[profile_id]["total_emails_found"] += emails_found
+            # CORRECCIÓN: Actualizar el número actual de correos (no sumar)
+            stats[profile_id]["current_emails_found"] = emails_found
+            # Mantener acumulativo separado para historial
+            stats[profile_id]["total_emails_accumulated"] += emails_found
             stats[profile_id]["last_execution"] = datetime.now().isoformat()
 
             # Agregar al historial (mantener últimas 50 ejecuciones)
@@ -359,16 +363,26 @@ class ProfileService:
         """
         try:
             stats = self._load_profile_stats()
-            return stats.get(profile_id, {
+            profile_stats = stats.get(profile_id, {
                 "total_executions": 0,
-                "total_emails_found": 0,
+                "current_emails_found": 0,
+                "total_emails_accumulated": 0,
                 "last_execution": None,
                 "execution_history": []
             })
+
+            # Mantener compatibilidad con versiones anteriores
+            if "current_emails_found" not in profile_stats:
+                profile_stats["current_emails_found"] = profile_stats.get("total_emails_found", 0)
+            if "total_emails_accumulated" not in profile_stats:
+                profile_stats["total_emails_accumulated"] = profile_stats.get("total_emails_found", 0)
+
+            return profile_stats
         except Exception:
             return {
                 "total_executions": 0,
-                "total_emails_found": 0,
+                "current_emails_found": 0,
+                "total_emails_accumulated": 0,
                 "last_execution": None,
                 "execution_history": []
             }
@@ -390,10 +404,17 @@ class ProfileService:
                 if profile_id:
                     profile_stats = stats.get(profile_id, {
                         "total_executions": 0,
-                        "total_emails_found": 0,
+                        "current_emails_found": 0,
+                        "total_emails_accumulated": 0,
                         "last_execution": None,
                         "execution_history": []
                     })
+
+                    # Mantener compatibilidad con versiones anteriores
+                    if "current_emails_found" not in profile_stats:
+                        profile_stats["current_emails_found"] = profile_stats.get("total_emails_found", 0)
+                    if "total_emails_accumulated" not in profile_stats:
+                        profile_stats["total_emails_accumulated"] = profile_stats.get("total_emails_found", 0)
 
                     result[profile_id] = {
                         "profile": profile,
@@ -418,11 +439,13 @@ class ProfileService:
             active_count = sum(1 for p in profiles if p.get("is_active", True))
             inactive_count = len(profiles) - active_count
 
-            total_emails_found = 0
+            total_emails_current = 0
+            total_emails_accumulated = 0
             total_executions = 0
 
             for stat in stats.values():
-                total_emails_found += stat.get("total_emails_found", 0)
+                total_emails_current += stat.get("current_emails_found", stat.get("total_emails_found", 0))
+                total_emails_accumulated += stat.get("total_emails_accumulated", stat.get("total_emails_found", 0))
                 total_executions += stat.get("total_executions", 0)
 
             return {
@@ -430,7 +453,8 @@ class ProfileService:
                 "active_profiles": active_count,
                 "inactive_profiles": inactive_count,
                 "total_executions": total_executions,
-                "total_emails_found": total_emails_found
+                "current_emails_found": total_emails_current,
+                "total_emails_accumulated": total_emails_accumulated
             }
         except Exception:
             return {
@@ -438,7 +462,8 @@ class ProfileService:
                 "active_profiles": 0,
                 "inactive_profiles": 0,
                 "total_executions": 0,
-                "total_emails_found": 0
+                "current_emails_found": 0,
+                "total_emails_accumulated": 0
             }
 
     def export_profiles(self, export_path):
@@ -565,7 +590,8 @@ class ProfileService:
             if profile_id not in stats:
                 stats[profile_id] = {
                     "total_executions": 0,
-                    "total_emails_found": 0,
+                    "current_emails_found": 0,
+                    "total_emails_accumulated": 0,
                     "last_execution": None,
                     "execution_history": []
                 }

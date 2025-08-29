@@ -102,7 +102,7 @@ class ExcelService:
             date_cell.alignment = Alignment(horizontal="center", vertical="center")
 
             # Encabezados de columnas
-            headers = ["Nombre del Perfil", "Veces Ejecutada", "Ultima Ejecucion"]
+            headers = ["Nombre del Perfil", "Correos Encontrados", "Ultima Ejecucion"]
             for col, header in enumerate(headers, 1):
                 cell = ws.cell(row=4, column=col)
                 cell.value = header
@@ -113,14 +113,15 @@ class ExcelService:
 
             # Datos de perfiles
             row = 5
-            total_executions = 0
+            total_emails_current = 0
 
             for profile_id, data in profiles_stats.items():
                 profile = data.get("profile", {})
                 stats = data.get("stats", {})
 
                 profile_name = profile.get("name", "Sin nombre")
-                executions = stats.get("total_emails_found", 0)  # Usar total_emails_found como "veces ejecutada"
+                # CORRECCIÓN: Usar current_emails_found en lugar de total_emails_found
+                emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
                 last_execution = stats.get("last_execution")
 
                 # Formatear fecha de última ejecución
@@ -134,14 +135,14 @@ class ExcelService:
                     last_exec_str = "Nunca"
 
                 # Escribir datos
-                cells_data = [profile_name, executions, last_exec_str]
+                cells_data = [profile_name, emails_found, last_exec_str]
                 for col, value in enumerate(cells_data, 1):
                     cell = ws.cell(row=row, column=col)
                     cell.value = value
                     cell.alignment = cell_alignment
                     cell.border = border_style
 
-                total_executions += executions
+                total_emails_current += emails_found
                 row += 1
 
             # Fila de totales
@@ -154,7 +155,7 @@ class ExcelService:
                 total_cell.border = border_style
 
                 total_value_cell = ws[f"B{row}"]
-                total_value_cell.value = total_executions
+                total_value_cell.value = total_emails_current
                 total_value_cell.font = Font(bold=True)
                 total_value_cell.alignment = cell_alignment
                 total_value_cell.border = border_style
@@ -176,7 +177,7 @@ class ExcelService:
 
             row += 1
             summary_cell2 = ws[f"A{row}"]
-            summary_cell2.value = f"Total de correos encontrados: {total_executions}"
+            summary_cell2.value = f"Total de correos encontrados actualmente: {total_emails_current}"
             summary_cell2.font = Font(italic=True)
 
             # Guardar archivo
@@ -274,7 +275,8 @@ class ExcelService:
             profile_name = profile.get("name", "Sin nombre")
             is_active = "Activo" if profile.get("is_active", True) else "Inactivo"
             executions = stats.get("total_executions", 0)
-            emails_found = stats.get("total_emails_found", 0)
+            # CORRECCIÓN: Usar current_emails_found
+            emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
 
             cells_data = [profile_name, is_active, executions, emails_found]
             for col, value in enumerate(cells_data, 1):
@@ -387,7 +389,7 @@ class ExcelService:
 
             with open(filepath, "w", encoding="utf-8") as f:
                 # Encabezados
-                f.write("Nombre del Perfil,Veces Ejecutada,Ultima Ejecucion\n")
+                f.write("Nombre del Perfil,Correos Encontrados,Ultima Ejecucion\n")
 
                 # Datos
                 for profile_id, data in profiles_stats.items():
@@ -395,7 +397,8 @@ class ExcelService:
                     stats = data.get("stats", {})
 
                     profile_name = self._clean_csv_value(profile.get("name", "Sin nombre"))
-                    executions = stats.get("total_emails_found", 0)
+                    # CORRECCIÓN: Usar current_emails_found
+                    emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
                     last_execution = stats.get("last_execution")
 
                     # Formatear fecha
@@ -408,7 +411,7 @@ class ExcelService:
                     else:
                         last_exec_str = "Nunca"
 
-                    f.write(f"{profile_name},{executions},{last_exec_str}\n")
+                    f.write(f"{profile_name},{emails_found},{last_exec_str}\n")
 
             return str(filepath)
 
