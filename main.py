@@ -1,7 +1,7 @@
 # main.py
 """
 Punto de entrada principal del Bot de Python con interfaz tkinter.
-Inicializa y ejecuta la ventana principal de la aplicación con gestión de perfiles.
+Inicializa y ejecuta la ventana principal con gestión de perfiles y programación automática.
 """
 
 # Archivos relacionados: gui/main_window.py
@@ -28,6 +28,12 @@ def check_dependencies():
     except ImportError:
         missing_deps.append("tkinter")
 
+    # Verificar schedule (requerido para programación automática)
+    try:
+        import schedule
+    except ImportError:
+        missing_deps.append("schedule")
+
     # Verificar dependencias opcionales pero recomendadas
     try:
         import openpyxl
@@ -37,6 +43,12 @@ def check_dependencies():
 
     if missing_deps:
         print(f"ERROR: Dependencias faltantes: {', '.join(missing_deps)}")
+
+        if "schedule" in missing_deps:
+            print("\nPara instalar la librería schedule:")
+            print("pip install schedule")
+            print("\nEsta librería es REQUERIDA para la funcionalidad de búsquedas automáticas programadas.")
+
         return False
 
     return True
@@ -90,14 +102,15 @@ def main():
         root.protocol("WM_DELETE_WINDOW", on_closing)
 
         # Mostrar información de inicio en consola
-        print("=" * 50)
-        print("🤖 BOT PYTHON - GESTIÓN DE PERFILES")
-        print("=" * 50)
+        print("=" * 60)
+        print("🤖 BOT PYTHON - GESTIÓN DE PERFILES CON PROGRAMACIÓN AUTOMÁTICA")
+        print("=" * 60)
         print("✅ Sistema iniciado correctamente")
         print("📧 Configure SMTP desde la interfaz")
         print("📊 Cree perfiles de búsqueda")
+        print("⏰ Configure búsquedas automáticas programadas")
         print("📋 Genere reportes Excel/CSV")
-        print("=" * 50)
+        print("=" * 60)
 
         # Iniciar loop principal
         root.mainloop()
@@ -108,7 +121,10 @@ def main():
         print("- gui/main_window.py")
         print("- gui/email_modal.py")
         print("- gui/profile_manager.py")
+        print("- gui/scheduler_modal.py")
         print("- services/*.py")
+        print("\nY que todas las dependencias estén instaladas:")
+        print("pip install schedule openpyxl")
         input("Presione Enter para salir...")
         sys.exit(1)
 

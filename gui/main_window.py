@@ -174,18 +174,14 @@ class MainWindow:
         reports_frame.grid(row=2, column=0, sticky="ew", pady=10)
         reports_frame.grid_columnconfigure(0, weight=1)
 
-        # Botones de reportes
+        # Botón de reporte Excel
         self.excel_button = ttk.Button(reports_frame, text="📊 Generar Reporte Excel",
                                        command=self.generate_excel_report)
         self.excel_button.grid(row=0, column=0, sticky="ew", pady=2)
 
-        self.csv_button = ttk.Button(reports_frame, text="📋 Generar Reporte CSV",
-                                     command=self.generate_csv_report)
-        self.csv_button.grid(row=1, column=0, sticky="ew", pady=2)
-
         self.view_reports_button = ttk.Button(reports_frame, text="📁 Ver Reportes Generados",
                                               command=self.show_available_reports)
-        self.view_reports_button.grid(row=2, column=0, sticky="ew", pady=2)
+        self.view_reports_button.grid(row=1, column=0, sticky="ew", pady=2)
 
         # Sección de utilidades
         utils_frame = ttk.LabelFrame(left_frame, text="Utilidades", padding="8")
@@ -397,61 +393,6 @@ class MainWindow:
             error_msg = self.clean_message(str(e))
             self.update_info(f"❌ Error mostrando resultado Excel: {error_msg}", "error")
 
-    def generate_csv_report(self):
-        """Genera un reporte en formato CSV"""
-        try:
-            if not self.services_loaded:
-                messagebox.showerror("Error", "Los servicios del sistema no están disponibles")
-                return
-
-            profiles_stats = self.profile_service.get_all_profiles_stats()
-            if not profiles_stats:
-                messagebox.showwarning("Sin Datos", "No hay perfiles creados para generar el reporte")
-                return
-
-            self.update_info("🔄 Generando reporte CSV...", "info")
-            self.csv_button.config(state="disabled", text="Generando...")
-
-            thread = threading.Thread(target=self._generate_csv_thread, daemon=True)
-            thread.start()
-
-        except Exception as e:
-            error_msg = self.clean_message(str(e))
-            self.update_info(f"❌ Error generando CSV: {error_msg}", "error")
-            self.csv_button.config(state="normal", text="📋 Generar Reporte CSV")
-
-    def _generate_csv_thread(self):
-        """Genera el reporte CSV en un hilo separado"""
-        try:
-            profiles_stats = self.profile_service.get_all_profiles_stats()
-            filepath = self.excel_service.create_csv_report(profiles_stats)
-
-            self.root.after(0, self._show_csv_result, True, f"Reporte CSV generado exitosamente:\n{filepath}")
-
-        except Exception as e:
-            error_msg = self.clean_message(str(e))
-            self.root.after(0, self._show_csv_result, False, f"Error generando CSV: {error_msg}")
-
-    def _show_csv_result(self, success, message):
-        """Muestra el resultado de la generación de CSV"""
-        try:
-            self.csv_button.config(state="normal", text="📋 Generar Reporte CSV")
-
-            status = "success" if success else "error"
-            symbol = "✓" if success else "❌"
-            self.update_info(f"{symbol} {message}", status)
-
-            if success:
-                result = messagebox.askyesno("Reporte Generado",
-                                             f"{message}\n\n¿Desea abrir la carpeta de reportes?")
-                if result:
-                    self.open_reports_folder()
-            else:
-                messagebox.showerror("Error", message)
-        except Exception as e:
-            error_msg = self.clean_message(str(e))
-            self.update_info(f"❌ Error mostrando resultado CSV: {error_msg}", "error")
-
     def show_available_reports(self):
         """Muestra una ventana con los reportes disponibles"""
         try:
@@ -465,7 +406,7 @@ class MainWindow:
                 messagebox.showinfo("Sin Reportes", "No hay reportes generados aún")
                 return
 
-            # Crear ventana de reportes (código igual que antes)
+            # Crear ventana de reportes
             self._create_reports_window(reports)
 
         except Exception as e:

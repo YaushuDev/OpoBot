@@ -120,7 +120,6 @@ class ExcelService:
                 stats = data.get("stats", {})
 
                 profile_name = profile.get("name", "Sin nombre")
-                # CORRECCIÓN: Usar current_emails_found en lugar de total_emails_found
                 emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
                 last_execution = stats.get("last_execution")
 
@@ -275,7 +274,6 @@ class ExcelService:
             profile_name = profile.get("name", "Sin nombre")
             is_active = "Activo" if profile.get("is_active", True) else "Inactivo"
             executions = stats.get("total_executions", 0)
-            # CORRECCIÓN: Usar current_emails_found
             emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
 
             cells_data = [profile_name, is_active, executions, emails_found]
@@ -365,88 +363,12 @@ class ExcelService:
         for i, width in enumerate(column_widths, 1):
             ws.column_dimensions[chr(64 + i)].width = width
 
-    def create_csv_report(self, profiles_stats, filename=None):
-        """
-        Genera un reporte en formato CSV como alternativa
-
-        Args:
-            profiles_stats (dict): Estadísticas de perfiles
-            filename (str, optional): Nombre del archivo
-
-        Returns:
-            str: Ruta del archivo generado
-
-        Raises:
-            Exception: Si hay error generando el reporte
-        """
-        try:
-            # Generar nombre de archivo si no se proporciona
-            if not filename:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"registro_de_bots_{timestamp}.csv"
-
-            filepath = self.reports_dir / filename
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                # Encabezados
-                f.write("Nombre del Perfil,Correos Encontrados,Ultima Ejecucion\n")
-
-                # Datos
-                for profile_id, data in profiles_stats.items():
-                    profile = data.get("profile", {})
-                    stats = data.get("stats", {})
-
-                    profile_name = self._clean_csv_value(profile.get("name", "Sin nombre"))
-                    # CORRECCIÓN: Usar current_emails_found
-                    emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
-                    last_execution = stats.get("last_execution")
-
-                    # Formatear fecha
-                    if last_execution:
-                        try:
-                            last_exec_dt = datetime.fromisoformat(last_execution.replace('Z', '+00:00'))
-                            last_exec_str = last_exec_dt.strftime("%d/%m/%Y %H:%M")
-                        except Exception:
-                            last_exec_str = "Error de fecha"
-                    else:
-                        last_exec_str = "Nunca"
-
-                    f.write(f"{profile_name},{emails_found},{last_exec_str}\n")
-
-            return str(filepath)
-
-        except Exception as e:
-            error_msg = self._clean_string(str(e))
-            raise Exception(f"Error generando reporte CSV: {error_msg}")
-
-    def _clean_csv_value(self, value):
-        """
-        Limpia un valor para CSV (maneja comas y comillas)
-
-        Args:
-            value: Valor a limpiar
-
-        Returns:
-            str: Valor limpio para CSV
-        """
-        if not value:
-            return ""
-
-        value_str = str(value)
-        # Si contiene coma, envolver en comillas
-        if "," in value_str or '"' in value_str:
-            # Escapar comillas existentes
-            value_str = value_str.replace('"', '""')
-            return f'"{value_str}"'
-
-        return value_str
-
     def get_available_reports(self):
         """
         Obtiene lista de reportes disponibles en el directorio
 
         Returns:
-            list: Lista de archivos de reporte
+            list: Lista de archivos de reporte Excel
         """
         try:
             if not self.reports_dir.exists():
@@ -454,7 +376,7 @@ class ExcelService:
 
             reports = []
             for file in self.reports_dir.iterdir():
-                if file.is_file() and file.suffix.lower() in ['.xlsx', '.csv']:
+                if file.is_file() and file.suffix.lower() == '.xlsx':
                     reports.append({
                         "name": file.name,
                         "path": str(file),
