@@ -368,7 +368,7 @@ class EmailSearchService:
 
     def _build_flexible_search_criteria(self, search_title, date_str):
         """
-        Construye criterio de búsqueda IMAP flexible que soporte espacios y búsqueda aproximada
+        Construye criterio de búsqueda IMAP flexible que soporte espacios, timestamps y texto adicional
 
         Args:
             search_title (str): Título/criterio de búsqueda
@@ -384,24 +384,60 @@ class EmailSearchService:
             if not clean_title:
                 return f'SINCE "{date_str}"'
 
-            # Estrategia 1: Buscar la frase completa primero (más específico)
-            # Si tiene espacios, intentar búsqueda por palabras individuales
+            # ESTRATEGIA MEJORADA: Combinación de múltiples aproximaciones
             if ' ' in clean_title:
-                # Dividir en palabras y filtrar palabras muy cortas
-                words = [word.strip() for word in clean_title.split() if len(word.strip()) >= 2]
+                # Dividir en palabras significativas (filtrar palabras muy cortas y comunes)
+                all_words = clean_title.split()
 
-                if len(words) == 1:
-                    # Solo una palabra válida
-                    return f'(SUBJECT "{words[0]}" SINCE "{date_str}")'
-                elif len(words) > 1:
-                    # Múltiples palabras - crear criterio que busque todas las palabras
-                    # OPCIÓN A: Buscar que el subject contenga todas las palabras (más flexible)
+                # Filtrar palabras significativas (>=2 chars y no palabras de conexión comunes)
+                stop_words = {'de', 'en', 'el', 'la', 'los', 'las', 'un', 'una', 'y', 'o', 'a', 'con', 'por', 'para'}
+                significant_words = []
+
+                for word in all_words:
+                    clean_word = word.strip().lower()
+                    if len(clean_word) >= 2 and clean_word not in stop_words:
+                        significant_words.append(word.strip())
+
+                if len(significant_words) == 0:
+                    # Si no hay palabras significativas, usar todas las palabras >= 2 chars
+                    significant_words = [word.strip() for word in all_words if len(word.strip()) >= 2]
+
+                if len(significant_words) == 1:
+                    # Solo una palabra significativa
+                    return f'(SUBJECT "{significant_words[0]}" SINCE "{date_str}")'
+
+                elif len(significant_words) > 1:
+                    # ESTRATEGIA MÚLTIPLE para encontrar correos con timestamps y texto adicional
+
+                    # Opción 1: Buscar frase completa (más específico)
+                    phrase_criteria = f'SUBJECT "{clean_title}"'
+
+                    # Opción 2: Buscar todas las palabras significativas (más flexible)
                     word_criteria = []
-                    for word in words:
+                    for word in significant_words:
                         word_criteria.append(f'SUBJECT "{word}"')
+                    words_criteria = ' '.join(word_criteria)
 
-                    # Construir criterio AND para que contenga todas las palabras
-                    combined_criteria = ' '.join(word_criteria)
+                    # Opción 3: Buscar combinaciones de palabras clave (ultra flexible)
+                    # Tomar las 2-3 palabras más importantes para casos con muchos timestamps/texto extra
+                    key_words = significant_words[:3]  # Máximo 3 palabras clave
+                    key_criteria = []
+                    for word in key_words:
+                        key_criteria.append(f'SUBJECT "{word}"')
+                    key_words_criteria = ' '.join(key_criteria)
+
+                    # CRITERIO FINAL: Combinar estrategias con OR para máxima flexibilidad
+                    # Esto encontrará correos que:
+                    # 1. Contengan la frase exacta, O
+                    # 2. Contengan todas las palabras significativas, O
+                    # 3. Contengan al menos las palabras clave principales
+                    if len(significant_words) <= 3:
+                        # Pocas palabras: usar estrategia 1 y 2
+                        combined_criteria = f'OR {phrase_criteria} ({words_criteria})'
+                    else:
+                        # Muchas palabras: usar todas las estrategias
+                        combined_criteria = f'OR OR {phrase_criteria} ({words_criteria}) ({key_words_criteria})'
+
                     return f'({combined_criteria} SINCE "{date_str}")'
                 else:
                     # No hay palabras válidas
@@ -412,7 +448,13 @@ class EmailSearchService:
 
         except Exception as e:
             print(f"ERROR construyendo criterio de búsqueda: {e}")
-            # Fallback a búsqueda básica
+            # Fallback a búsqueda básica por primera palabra significativa
+            try:
+                first_word = clean_title.split()[0] if clean_title.split() else ""
+                if first_word and len(first_word) >= 2:
+                    return f'(SUBJECT "{first_word}" SINCE "{date_str}")'
+            except:
+                pass
             return f'SINCE "{date_str}"'
 
     def _search_emails_by_subject(self, search_title, days_back=30):
