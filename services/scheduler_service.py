@@ -1,15 +1,14 @@
 # services/scheduler_service.py
 """
-Servicio para programación automática de búsquedas de correos.
-Maneja la configuración de horarios, intervalos y ejecución automática de perfiles.
+Servicio para programación automática de búsquedas de correos con envío automático de reportes.
+Maneja la configuración de horarios, intervalos, ejecución automática y envío por correo de reportes Excel.
 """
 
-# Archivos relacionados: services/config_service.py, services/email_search_service.py, services/profile_service.py
+# Archivos relacionados: services/config_service.py, services/email_search_service.py, services/profile_service.py, services/excel_service.py, services/email_send_service.py
 
 import json
 import threading
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
 import schedule
 
@@ -202,7 +201,7 @@ class SchedulerService:
 
     def execute_scheduled_search(self):
         """
-        Ejecuta una búsqueda programada
+        Ejecuta una búsqueda programada con generación y envío automático de reporte
 
         Returns:
             tuple: (success: bool, message: str)
@@ -213,18 +212,21 @@ class SchedulerService:
             from services.profile_service import ProfileService
             from services.email_search_service import EmailSearchService
             from services.config_service import ConfigService
+            from services.excel_service import ExcelService
+            from services.email_send_service import EmailSendService
 
-            # Verificar credenciales
             config_service = ConfigService()
+
+            # Verificar credenciales SMTP
             if not config_service.credentials_exist():
-                error_msg = "No hay credenciales configuradas"
+                error_msg = "No hay credenciales SMTP configuradas"
                 print(f"ERROR: {error_msg}")
                 self._notify_callback(f"Error en búsqueda automática: {error_msg}", "error")
                 return False, error_msg
 
             credentials = config_service.load_credentials()
             if not credentials:
-                error_msg = "No se pudieron cargar las credenciales"
+                error_msg = "No se pudieron cargar las credenciales SMTP"
                 print(f"ERROR: {error_msg}")
                 self._notify_callback(f"Error en búsqueda automática: {error_msg}", "error")
                 return False, error_msg
@@ -235,7 +237,7 @@ class SchedulerService:
 
             if not active_profiles:
                 error_msg = "No hay perfiles activos"
-                print(f"ERROR: {error_msg}")
+                print(f"WARNING: {error_msg}")
                 self._notify_callback(f"Búsqueda automática: {error_msg}", "warning")
                 return False, error_msg
 
@@ -262,17 +264,60 @@ class SchedulerService:
                     failed_profiles += 1
                     print(f"DEBUG: Perfil {profile_id} - Error: {result.get('message', 'Unknown')}")
 
-            # Preparar mensaje de resultado
-            success_message = f"Búsqueda automática completada: {successful_profiles}/{len(results)} perfiles exitosos, {total_emails} correos encontrados"
-            print(f"DEBUG: {success_message}")
+            # Preparar mensaje de resultado de búsqueda
+            search_message = f"Búsqueda automática completada: {successful_profiles}/{len(results)} perfiles exitosos, {total_emails} correos encontrados"
+            print(f"DEBUG: {search_message}")
 
-            # Notificar resultado
-            if successful_profiles > 0:
-                self._notify_callback(success_message, "success")
-                return True, success_message
-            else:
-                self._notify_callback(f"Búsqueda automática completada sin resultados", "warning")
+            if successful_profiles == 0:
+                self._notify_callback("Búsqueda automática completada sin resultados", "warning")
                 return True, "Búsqueda completada sin resultados"
+
+            # NUEVA FUNCIONALIDAD: Generar y enviar reporte automáticamente
+            try:
+                self._notify_callback("Generando reporte Excel...", "info")
+
+                # Generar reporte Excel
+                excel_service = ExcelService()
+                profiles_stats = profile_service.get_all_profiles_stats()
+
+                if not profiles_stats:
+                    self._notify_callback("No hay datos para generar reporte", "warning")
+                    return True, f"{search_message}. Reporte no generado: sin datos"
+
+                report_path = excel_service.generate_profiles_report(profiles_stats)
+                print(f"DEBUG: Reporte generado: {report_path}")
+                self._notify_callback(f"Reporte Excel generado: {Path(report_path).name}", "success")
+
+                # Verificar configuración de envío
+                email_send_status = config_service.get_email_send_status()
+                if not email_send_status["ready"]:
+                    final_message = f"{search_message}. Reporte generado pero no enviado (configuración de envío no lista)"
+                    self._notify_callback("Reporte no enviado: configuración de envío incompleta", "warning")
+                    return True, final_message
+
+                # Enviar reporte por correo
+                self._notify_callback("Enviando reporte por correo...", "info")
+                email_send_service = EmailSendService()
+
+                send_success, send_message = email_send_service.send_report_email(report_path)
+
+                if send_success:
+                    final_message = f"{search_message}. Reporte generado y enviado por correo exitosamente"
+                    self._notify_callback(f"Reporte enviado por correo: {send_message}", "success")
+                    print(f"DEBUG: {final_message}")
+                    return True, final_message
+                else:
+                    final_message = f"{search_message}. Reporte generado pero error enviando: {send_message}"
+                    self._notify_callback(f"Error enviando reporte: {send_message}", "error")
+                    print(f"ERROR: {final_message}")
+                    return True, final_message  # True porque la búsqueda fue exitosa
+
+            except Exception as report_error:
+                report_error_msg = self._clean_string(str(report_error))
+                final_message = f"{search_message}. Error generando/enviando reporte: {report_error_msg}"
+                self._notify_callback(f"Error con reporte: {report_error_msg}", "error")
+                print(f"ERROR generando/enviando reporte: {report_error_msg}")
+                return True, final_message  # True porque la búsqueda fue exitosa
 
         except Exception as e:
             import traceback

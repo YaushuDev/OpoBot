@@ -1,13 +1,12 @@
 # services/config_service.py
 """
 Servicio para manejo de persistencia de configuraciones en formato JSON.
-Guarda y carga credenciales de manera segura con cifrado básico.
+Guarda y carga credenciales de manera segura con cifrado básico y configuración de envío de reportes.
 """
 
 # Archivos relacionados: Ninguno (servicio independiente)
 
 import json
-import os
 import base64
 from pathlib import Path
 
@@ -22,6 +21,7 @@ class ConfigService:
         """
         self.config_dir = Path(config_dir)
         self.credentials_file = self.config_dir / "credentials.json"
+        self.email_send_file = self.config_dir / "email_send_config.json"
         self.ensure_config_directory()
 
     def ensure_config_directory(self):
@@ -117,6 +117,127 @@ class ConfigService:
         except Exception:
             return False
 
+    def save_email_send_config(self, config):
+        """
+        Guarda la configuración de envío de reportes por email
+
+        Args:
+            config (dict): Configuración de envío
+
+        Raises:
+            Exception: Si hay error guardando la configuración
+        """
+        try:
+            # Limpiar strings de caracteres problemáticos
+            clean_config = {}
+            for key, value in config.items():
+                if isinstance(value, str):
+                    clean_config[key] = self._clean_string(value)
+                else:
+                    clean_config[key] = value
+
+            # Guardar en archivo JSON
+            with open(self.email_send_file, "w", encoding="utf-8") as f:
+                json.dump(clean_config, f, indent=4, ensure_ascii=True)
+
+        except Exception as e:
+            error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+            raise Exception(f"Error guardando configuracion de envio: {error_msg}")
+
+    def load_email_send_config(self):
+        """
+        Carga la configuración de envío de reportes
+
+        Returns:
+            dict: Configuración de envío o None si no existe
+
+        Raises:
+            Exception: Si hay error cargando la configuración
+        """
+        try:
+            if not self.email_send_file.exists():
+                return None
+
+            with open(self.email_send_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            # Limpiar strings de caracteres problemáticos
+            clean_config = {}
+            for key, value in config.items():
+                if isinstance(value, str):
+                    clean_config[key] = self._clean_string(value)
+                else:
+                    clean_config[key] = value
+
+            return clean_config
+
+        except Exception as e:
+            error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+            raise Exception(f"Error cargando configuracion de envio: {error_msg}")
+
+    def email_send_config_exists(self):
+        """
+        Verifica si existe configuración de envío
+
+        Returns:
+            bool: True si existe la configuración
+        """
+        return self.email_send_file.exists()
+
+    def delete_email_send_config(self):
+        """
+        Elimina la configuración de envío
+
+        Returns:
+            bool: True si se eliminó exitosamente
+        """
+        try:
+            if self.email_send_file.exists():
+                self.email_send_file.unlink()
+                return True
+            return False
+        except Exception:
+            return False
+
+    def get_email_send_status(self):
+        """
+        Obtiene el estado de la configuración de envío
+
+        Returns:
+            dict: Estado de la configuración de envío
+        """
+        try:
+            config = self.load_email_send_config()
+
+            if not config:
+                return {
+                    "configured": False,
+                    "enabled": False,
+                    "has_recipient": False,
+                    "ready": False
+                }
+
+            has_recipient = bool(config.get("recipient", "").strip())
+            is_enabled = config.get("enabled", False)
+
+            return {
+                "configured": True,
+                "enabled": is_enabled,
+                "has_recipient": has_recipient,
+                "ready": is_enabled and has_recipient,
+                "recipient": config.get("recipient", ""),
+                "subject": config.get("subject", ""),
+                "cc": config.get("cc", "")
+            }
+
+        except Exception:
+            return {
+                "configured": False,
+                "enabled": False,
+                "has_recipient": False,
+                "ready": False
+            }
+
     def backup_credentials(self, backup_name=None):
         """
         Crea un respaldo de las credenciales
@@ -188,16 +309,25 @@ class ConfigService:
         info = {
             "config_directory": str(self.config_dir),
             "credentials_file": str(self.credentials_file),
+            "email_send_file": str(self.email_send_file),
             "credentials_exist": self.credentials_exist(),
-            "file_size": 0,
-            "last_modified": None
+            "email_send_config_exists": self.email_send_config_exists(),
+            "credentials_file_size": 0,
+            "email_send_file_size": 0,
+            "credentials_last_modified": None,
+            "email_send_last_modified": None
         }
 
         try:
             if self.credentials_file.exists():
                 stat = self.credentials_file.stat()
-                info["file_size"] = stat.st_size
-                info["last_modified"] = stat.st_mtime
+                info["credentials_file_size"] = stat.st_size
+                info["credentials_last_modified"] = stat.st_mtime
+
+            if self.email_send_file.exists():
+                stat = self.email_send_file.stat()
+                info["email_send_file_size"] = stat.st_size
+                info["email_send_last_modified"] = stat.st_mtime
         except Exception:
             pass
 
@@ -253,13 +383,21 @@ class ConfigService:
         """
         try:
             credentials = self.load_credentials()
-            if not credentials:
-                raise Exception("No hay credenciales para exportar")
+            email_send_config = self.load_email_send_config()
 
-            export_data = credentials.copy()
+            export_data = {
+                "credentials": credentials,
+                "email_send_config": email_send_config,
+                "export_date": None,
+                "version": "1.1"
+            }
 
-            if not include_passwords and "password" in export_data:
-                export_data["password"] = "***OCULTA***"
+            # Obtener fecha actual
+            from datetime import datetime
+            export_data["export_date"] = datetime.now().isoformat()
+
+            if credentials and not include_passwords and "password" in credentials:
+                export_data["credentials"]["password"] = "***OCULTA***"
 
             with open(export_path, "w", encoding="utf-8") as f:
                 json.dump(export_data, f, indent=4, ensure_ascii=False)
@@ -283,15 +421,23 @@ class ConfigService:
                 raise Exception(f"El archivo no existe: {import_path}")
 
             with open(import_file, "r", encoding="utf-8") as f:
-                credentials = json.load(f)
+                import_data = json.load(f)
 
-            # Validar que tiene los campos mínimos requeridos
-            required_fields = ["email", "server", "port"]
-            for field in required_fields:
-                if field not in credentials:
-                    raise Exception(f"Campo requerido faltante: {field}")
+            # Importar credenciales si existen
+            if "credentials" in import_data and import_data["credentials"]:
+                credentials = import_data["credentials"]
+                # Validar que tiene los campos mínimos requeridos
+                required_fields = ["email", "server", "port"]
+                for field in required_fields:
+                    if field not in credentials:
+                        raise Exception(f"Campo requerido faltante en credenciales: {field}")
 
-            self.save_credentials(credentials)
+                self.save_credentials(credentials)
+
+            # Importar configuración de envío si existe
+            if "email_send_config" in import_data and import_data["email_send_config"]:
+                email_config = import_data["email_send_config"]
+                self.save_email_send_config(email_config)
 
         except Exception as e:
             error_msg = str(e).encode('ascii', 'ignore').decode('ascii')

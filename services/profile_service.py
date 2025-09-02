@@ -7,7 +7,6 @@ Maneja la creación, edición, eliminación y persistencia de perfiles.
 # Archivos relacionados: services/config_service.py, services/email_search_service.py
 
 import json
-import os
 import uuid
 from pathlib import Path
 from datetime import datetime

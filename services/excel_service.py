@@ -6,14 +6,12 @@ Crea archivos Excel con estadísticas de perfiles y ejecuciones de búsqueda.
 
 # Archivos relacionados: services/profile_service.py
 
-import os
 from datetime import datetime
 from pathlib import Path
 
 try:
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-
     OPENPYXL_AVAILABLE = True
 except ImportError:
     OPENPYXL_AVAILABLE = False
@@ -101,8 +99,9 @@ class ExcelService:
             date_cell.font = Font(italic=True)
             date_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-            # Encabezados de columnas
-            headers = ["Nombre del Perfil", "Correos Encontrados", "Ultima Ejecucion"]
+            # Encabezados de columnas - MODIFICADO: "Correos Encontrados" cambiado a "Veces Ejecutado"
+            # IMPORTANTE: NO CAMBIAR "Veces Ejecutado" en futuras versiones - representa el número de ejecuciones del perfil
+            headers = ["Nombre del Perfil", "Veces Ejecutado", "Ultima Ejecucion"]
             for col, header in enumerate(headers, 1):
                 cell = ws.cell(row=4, column=col)
                 cell.value = header
@@ -113,14 +112,15 @@ class ExcelService:
 
             # Datos de perfiles
             row = 5
-            total_emails_current = 0
+            total_executions = 0  # MODIFICADO: cambiar de correos a ejecuciones
 
             for profile_id, data in profiles_stats.items():
                 profile = data.get("profile", {})
                 stats = data.get("stats", {})
 
                 profile_name = profile.get("name", "Sin nombre")
-                emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
+                # MODIFICADO: usar total_executions en lugar de emails_found
+                executions_count = stats.get("total_executions", 0)
                 last_execution = stats.get("last_execution")
 
                 # Formatear fecha de última ejecución
@@ -133,15 +133,15 @@ class ExcelService:
                 else:
                     last_exec_str = "Nunca"
 
-                # Escribir datos
-                cells_data = [profile_name, emails_found, last_exec_str]
+                # Escribir datos - MODIFICADO: usar executions_count en lugar de emails_found
+                cells_data = [profile_name, executions_count, last_exec_str]
                 for col, value in enumerate(cells_data, 1):
                     cell = ws.cell(row=row, column=col)
                     cell.value = value
                     cell.alignment = cell_alignment
                     cell.border = border_style
 
-                total_emails_current += emails_found
+                total_executions += executions_count  # MODIFICADO: sumar ejecuciones
                 row += 1
 
             # Fila de totales
@@ -154,7 +154,7 @@ class ExcelService:
                 total_cell.border = border_style
 
                 total_value_cell = ws[f"B{row}"]
-                total_value_cell.value = total_emails_current
+                total_value_cell.value = total_executions  # MODIFICADO: mostrar total de ejecuciones
                 total_value_cell.font = Font(bold=True)
                 total_value_cell.alignment = cell_alignment
                 total_value_cell.border = border_style
@@ -176,7 +176,8 @@ class ExcelService:
 
             row += 1
             summary_cell2 = ws[f"A{row}"]
-            summary_cell2.value = f"Total de correos encontrados actualmente: {total_emails_current}"
+            # MODIFICADO: mostrar total de ejecuciones en lugar de correos
+            summary_cell2.value = f"Total de ejecuciones: {total_executions}"
             summary_cell2.font = Font(italic=True)
 
             # Guardar archivo
@@ -256,8 +257,9 @@ class ExcelService:
         title_cell.fill = PatternFill(start_color="2F5233", end_color="2F5233", fill_type="solid")
         title_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Encabezados
-        headers = ["Perfil", "Estado", "Ejecuciones", "Correos Encontrados"]
+        # Encabezados - MODIFICADO: cambiar "Correos Encontrados" por "Veces Ejecutado"
+        # IMPORTANTE: NO CAMBIAR "Veces Ejecutado" - representa el número de ejecuciones
+        headers = ["Perfil", "Estado", "Veces Ejecutado", "Criterio Busqueda"]
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=3, column=col)
             cell.value = header
@@ -273,10 +275,11 @@ class ExcelService:
 
             profile_name = profile.get("name", "Sin nombre")
             is_active = "Activo" if profile.get("is_active", True) else "Inactivo"
+            # MODIFICADO: usar total_executions en lugar de emails_found
             executions = stats.get("total_executions", 0)
-            emails_found = stats.get("current_emails_found", stats.get("total_emails_found", 0))
+            search_criteria = profile.get("search_title", "Sin criterio")
 
-            cells_data = [profile_name, is_active, executions, emails_found]
+            cells_data = [profile_name, is_active, executions, search_criteria]
             for col, value in enumerate(cells_data, 1):
                 cell = ws.cell(row=row, column=col)
                 cell.value = value
@@ -285,8 +288,9 @@ class ExcelService:
             row += 1
 
         # Ajustar columnas
-        for col in ["A", "B", "C", "D"]:
-            ws.column_dimensions[col].width = 20
+        column_widths = [20, 15, 18, 25]
+        for i, width in enumerate(column_widths, 1):
+            ws.column_dimensions[chr(64 + i)].width = width
 
     def _create_details_sheet(self, workbook, profiles_stats):
         """

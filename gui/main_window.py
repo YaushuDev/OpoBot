@@ -1,10 +1,10 @@
 # gui/main_window.py
 """
 Ventana principal de la aplicación con diseño de 3 secciones.
-Maneja la interfaz principal con gestión de perfiles, configuraciones y reportes.
+Maneja la interfaz principal con gestión de perfiles, configuraciones, reportes y envío automático.
 """
 
-# Archivos relacionados: gui/email_modal.py, gui/profile_manager.py, services/excel_service.py
+# Archivos relacionados: gui/email_modal.py, gui/profile_manager.py, gui/email_send_modal.py, services/excel_service.py
 
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -45,6 +45,7 @@ class MainWindow:
         try:
             from gui.email_modal import EmailModal
             from gui.profile_manager import ProfileManager
+            from gui.email_send_modal import EmailSendModal
             from services.excel_service import ExcelService
             from services.profile_service import ProfileService
 
@@ -61,7 +62,7 @@ class MainWindow:
 
     def setup_window(self):
         """Configura las propiedades básicas de la ventana"""
-        self.root.title("Bot Python - Gestión de Perfiles y Configuración SMTP")
+        self.root.title("Bot Python - Gestión de Perfiles y Configuración SMTP con Envío Automático")
         self.root.geometry("1000x700")
         self.root.resizable(True, True)
         self.root.minsize(800, 600)
@@ -146,7 +147,7 @@ class MainWindow:
         """
         left_frame = ttk.LabelFrame(parent, text="Panel de Control", padding="10")
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
-        left_frame.grid_rowconfigure(3, weight=1)
+        left_frame.grid_rowconfigure(4, weight=1)  # Cambiar a 4 porque agregamos una sección más
         left_frame.grid_columnconfigure(0, weight=1)
 
         # Título
@@ -169,9 +170,24 @@ class MainWindow:
                                            foreground="red", font=("Arial", 8))
         self.smtp_status_label.grid(row=1, column=0, sticky="w", pady=(2, 0))
 
+        # NUEVA SECCIÓN: Configuración de Envío de Reportes
+        send_frame = ttk.LabelFrame(left_frame, text="Envio de Reportes", padding="8")
+        send_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        send_frame.grid_columnconfigure(0, weight=1)
+
+        # Botón para configurar envío
+        self.email_send_button = ttk.Button(send_frame, text="📧 Configurar Envio de Email",
+                                            command=self.open_email_send_modal)
+        self.email_send_button.grid(row=0, column=0, sticky="ew", pady=2)
+
+        # Estado de configuración de envío
+        self.send_status_label = ttk.Label(send_frame, text="Estado: No configurado",
+                                           foreground="red", font=("Arial", 8))
+        self.send_status_label.grid(row=1, column=0, sticky="w", pady=(2, 0))
+
         # Sección de reportes
         reports_frame = ttk.LabelFrame(left_frame, text="Generacion de Reportes", padding="8")
-        reports_frame.grid(row=2, column=0, sticky="ew", pady=10)
+        reports_frame.grid(row=3, column=0, sticky="ew", pady=10)
         reports_frame.grid_columnconfigure(0, weight=1)
 
         # Botón de reporte Excel
@@ -185,7 +201,7 @@ class MainWindow:
 
         # Sección de utilidades
         utils_frame = ttk.LabelFrame(left_frame, text="Utilidades", padding="8")
-        utils_frame.grid(row=3, column=0, sticky="new", pady=(10, 0))
+        utils_frame.grid(row=4, column=0, sticky="new", pady=(10, 0))
         utils_frame.grid_columnconfigure(0, weight=1)
 
         # Botón para limpiar log
@@ -255,11 +271,14 @@ class MainWindow:
             # Verificar estado SMTP
             self.check_smtp_status()
 
+            # Verificar estado de envío de reportes
+            self.check_email_send_status()
+
             # Mostrar mensajes iniciales
             self.update_info("🚀 Sistema iniciado correctamente", "success")
 
             if self.services_loaded:
-                self.update_info("📧 Configure su email SMTP y cree perfiles de búsqueda para comenzar", "info")
+                self.update_info("📧 Configure SMTP y envío de reportes, luego cree perfiles para comenzar", "info")
 
                 # Verificar si hay perfiles
                 if hasattr(self, 'profile_service'):
@@ -283,15 +302,37 @@ class MainWindow:
 
             if config_service.credentials_exist():
                 self.smtp_status_label.config(text="Estado: Configurado ✓", foreground="green")
-                self.status_label.config(text="SMTP Configurado")
                 return True
             else:
                 self.smtp_status_label.config(text="Estado: No configurado ✗", foreground="red")
-                self.status_label.config(text="SMTP No configurado")
                 return False
         except Exception:
             self.smtp_status_label.config(text="Estado: Error ⚠", foreground="orange")
-            self.status_label.config(text="Error SMTP")
+            return False
+
+    def check_email_send_status(self):
+        """Verifica el estado de la configuración de envío de reportes"""
+        try:
+            from services.config_service import ConfigService
+            config_service = ConfigService()
+
+            send_status = config_service.get_email_send_status()
+
+            if send_status["ready"]:
+                self.send_status_label.config(text="Estado: Configurado ✓", foreground="green")
+                return True
+            elif send_status["configured"] and not send_status["enabled"]:
+                self.send_status_label.config(text="Estado: Deshabilitado ⚠", foreground="orange")
+                return False
+            elif send_status["configured"]:
+                self.send_status_label.config(text="Estado: Incompleto ⚠", foreground="orange")
+                return False
+            else:
+                self.send_status_label.config(text="Estado: No configurado ✗", foreground="red")
+                return False
+
+        except Exception:
+            self.send_status_label.config(text="Estado: Error ⚠", foreground="orange")
             return False
 
     def open_email_modal(self):
@@ -307,6 +348,20 @@ class MainWindow:
             error_msg = self.clean_message(str(e))
             self.update_info(f"❌ Error abriendo configuración de email: {error_msg}", "error")
             messagebox.showerror("Error", f"No se pudo abrir la configuración de email:\n{error_msg}")
+
+    def open_email_send_modal(self):
+        """Abre el modal de configuración de envío de reportes"""
+        try:
+            if not self.services_loaded:
+                messagebox.showerror("Error", "Los servicios del sistema no están disponibles")
+                return
+
+            from gui.email_send_modal import EmailSendModal
+            EmailSendModal(self.root, self.on_email_send_configured)
+        except Exception as e:
+            error_msg = self.clean_message(str(e))
+            self.update_info(f"❌ Error abriendo configuración de envío: {error_msg}", "error")
+            messagebox.showerror("Error", f"No se pudo abrir la configuración de envío:\n{error_msg}")
 
     def on_email_configured(self, success, message):
         """
@@ -327,6 +382,26 @@ class MainWindow:
         except Exception as e:
             error_msg = self.clean_message(str(e))
             self.update_info(f"❌ Error procesando configuración SMTP: {error_msg}", "error")
+
+    def on_email_send_configured(self, success, message):
+        """
+        Callback llamado cuando se configura el envío de reportes
+        """
+        try:
+            clean_message = self.clean_message(message)
+            status = "success" if success else "error"
+
+            if success:
+                self.update_info(f"✓ Configuración de envío: {clean_message}", status)
+                # Actualizar estado
+                self.check_email_send_status()
+            else:
+                self.update_info(f"✗ Error configuración envío: {clean_message}", status)
+                self.send_status_label.config(text="Estado: Error ⚠", foreground="orange")
+
+        except Exception as e:
+            error_msg = self.clean_message(str(e))
+            self.update_info(f"❌ Error procesando configuración de envío: {error_msg}", "error")
 
     def generate_excel_report(self):
         """Genera un reporte en formato Excel"""

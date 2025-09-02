@@ -10,7 +10,6 @@ import imaplib
 import email
 import socket
 from datetime import datetime, timedelta
-import re
 from email.header import decode_header
 
 

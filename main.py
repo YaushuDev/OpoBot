@@ -8,7 +8,6 @@ Inicializa y ejecuta la ventana principal con gesti√≥n de perfiles y programaci√
 
 import tkinter as tk
 import sys
-import os
 from pathlib import Path
 
 
