@@ -1,7 +1,7 @@
 # services/email_search_service.py
 """
-Servicio para búsqueda de correos usando perfiles de búsqueda.
-Conecta con cuentas de email y busca correos basado en criterios definidos.
+Servicio para búsqueda de correos usando perfiles de búsqueda con soporte para búsqueda aproximada.
+Conecta con cuentas de email y busca correos basado en criterios definidos, soportando espacios y títulos parciales.
 """
 
 import imaplib
@@ -9,6 +9,7 @@ import email
 import socket
 from datetime import datetime, timedelta
 from email.header import decode_header
+import re
 
 
 class EmailSearchService:
@@ -39,8 +40,8 @@ class EmailSearchService:
             if not success:
                 return False, 0, f"Error conectando: {message}"
 
-            # Buscar correos
-            emails_found = self._search_emails_by_subject(search_title, days_back)
+            # Buscar correos usando búsqueda aproximada
+            emails_found = self._search_emails_by_subject_flexible(search_title, days_back)
 
             # Desconectar
             self._disconnect_imap()
@@ -102,7 +103,8 @@ class EmailSearchService:
                         }
                         continue
 
-                    emails_found = self._search_emails_by_subject(search_title, days_back)
+                    # Usar búsqueda flexible
+                    emails_found = self._search_emails_by_subject_flexible(search_title, days_back)
 
                     results[profile["id"]] = {
                         "success": True,
@@ -162,8 +164,8 @@ class EmailSearchService:
             if not success:
                 return False, [], f"Error conectando: {message}"
 
-            # Buscar y obtener detalles de correos
-            emails = self._get_email_details_by_subject(search_title, days_back, limit)
+            # Buscar y obtener detalles de correos usando búsqueda flexible
+            emails = self._get_email_details_by_subject_flexible(search_title, days_back, limit)
 
             # Desconectar
             self._disconnect_imap()
@@ -252,12 +254,13 @@ class EmailSearchService:
             self.connection = None
             self.current_credentials = None
 
-    def _search_emails_by_subject(self, search_title, days_back=30):
+    def _search_emails_by_subject_flexible(self, search_title, days_back=30):
         """
-        Busca correos por título/asunto
+        Busca correos por título/asunto usando búsqueda aproximada y flexible
+        Soporta espacios y encuentra coincidencias parciales
 
         Args:
-            search_title (str): Título a buscar
+            search_title (str): Título a buscar (puede contener espacios)
             days_back (int): Días hacia atrás
 
         Returns:
@@ -271,8 +274,10 @@ class EmailSearchService:
             start_date = datetime.now() - timedelta(days=days_back)
             date_str = start_date.strftime("%d-%b-%Y")
 
-            # Buscar correos con el criterio de asunto y fecha
-            search_criteria = f'(SUBJECT "{search_title}" SINCE "{date_str}")'
+            # Construir criterio de búsqueda flexible
+            search_criteria = self._build_flexible_search_criteria(search_title, date_str)
+
+            print(f"DEBUG: Criterio de búsqueda construido: {search_criteria}")
 
             typ, msgnums = self.connection.search(None, search_criteria)
 
@@ -285,12 +290,13 @@ class EmailSearchService:
             else:
                 return 0
 
-        except Exception:
+        except Exception as e:
+            print(f"ERROR en búsqueda flexible: {e}")
             return 0
 
-    def _get_email_details_by_subject(self, search_title, days_back=30, limit=10):
+    def _get_email_details_by_subject_flexible(self, search_title, days_back=30, limit=10):
         """
-        Obtiene detalles de correos por título/asunto
+        Obtiene detalles de correos por título/asunto usando búsqueda aproximada
 
         Args:
             search_title (str): Título a buscar
@@ -310,7 +316,151 @@ class EmailSearchService:
             start_date = datetime.now() - timedelta(days=days_back)
             date_str = start_date.strftime("%d-%b-%Y")
 
-            # Buscar correos
+            # Usar criterio de búsqueda flexible
+            search_criteria = self._build_flexible_search_criteria(search_title, date_str)
+            typ, msgnums = self.connection.search(None, search_criteria)
+
+            if typ != 'OK' or not msgnums[0]:
+                return emails
+
+            # Obtener números de mensaje
+            msg_numbers = msgnums[0].split()
+
+            # Limitar número de correos
+            msg_numbers = msg_numbers[-limit:]  # Últimos N correos
+
+            # Obtener detalles de cada correo
+            for msg_num in msg_numbers:
+                try:
+                    typ, msg_data = self.connection.fetch(msg_num, '(RFC822)')
+
+                    if typ != 'OK':
+                        continue
+
+                    # Procesar mensaje
+                    email_message = email.message_from_bytes(msg_data[0][1])
+
+                    # Extraer información básica
+                    subject = self._decode_mime_words(email_message.get("Subject", ""))
+                    sender = self._decode_mime_words(email_message.get("From", ""))
+                    date_str_email = email_message.get("Date", "")
+
+                    # Limpiar strings
+                    subject = self._clean_string(subject)
+                    sender = self._clean_string(sender)
+
+                    email_info = {
+                        "subject": subject,
+                        "sender": sender,
+                        "date": date_str_email,
+                        "message_id": msg_num.decode() if isinstance(msg_num, bytes) else str(msg_num)
+                    }
+
+                    emails.append(email_info)
+
+                except Exception:
+                    continue  # Si hay error con un correo, continuar con el siguiente
+
+        except Exception:
+            pass  # Si hay error general, devolver lo que se pudo obtener
+
+        return emails
+
+    def _build_flexible_search_criteria(self, search_title, date_str):
+        """
+        Construye criterio de búsqueda IMAP flexible que soporte espacios y búsqueda aproximada
+
+        Args:
+            search_title (str): Título/criterio de búsqueda
+            date_str (str): Fecha desde la cual buscar
+
+        Returns:
+            str: Criterio de búsqueda IMAP
+        """
+        try:
+            # Limpiar y preparar el criterio de búsqueda
+            clean_title = self._clean_string(search_title.strip())
+
+            if not clean_title:
+                return f'SINCE "{date_str}"'
+
+            # Estrategia 1: Buscar la frase completa primero (más específico)
+            # Si tiene espacios, intentar búsqueda por palabras individuales
+            if ' ' in clean_title:
+                # Dividir en palabras y filtrar palabras muy cortas
+                words = [word.strip() for word in clean_title.split() if len(word.strip()) >= 2]
+
+                if len(words) == 1:
+                    # Solo una palabra válida
+                    return f'(SUBJECT "{words[0]}" SINCE "{date_str}")'
+                elif len(words) > 1:
+                    # Múltiples palabras - crear criterio que busque todas las palabras
+                    # OPCIÓN A: Buscar que el subject contenga todas las palabras (más flexible)
+                    word_criteria = []
+                    for word in words:
+                        word_criteria.append(f'SUBJECT "{word}"')
+
+                    # Construir criterio AND para que contenga todas las palabras
+                    combined_criteria = ' '.join(word_criteria)
+                    return f'({combined_criteria} SINCE "{date_str}")'
+                else:
+                    # No hay palabras válidas
+                    return f'SINCE "{date_str}"'
+            else:
+                # Palabra única, búsqueda directa
+                return f'(SUBJECT "{clean_title}" SINCE "{date_str}")'
+
+        except Exception as e:
+            print(f"ERROR construyendo criterio de búsqueda: {e}")
+            # Fallback a búsqueda básica
+            return f'SINCE "{date_str}"'
+
+    def _search_emails_by_subject(self, search_title, days_back=30):
+        """
+        MÉTODO LEGACY - Busca correos por título/asunto (búsqueda exacta)
+        Mantenido por compatibilidad, pero se recomienda usar _search_emails_by_subject_flexible
+        """
+        try:
+            if not self.connection:
+                return 0
+
+            # Calcular fecha de inicio
+            start_date = datetime.now() - timedelta(days=days_back)
+            date_str = start_date.strftime("%d-%b-%Y")
+
+            # Buscar correos con el criterio de asunto y fecha (MÉTODO ORIGINAL)
+            search_criteria = f'(SUBJECT "{search_title}" SINCE "{date_str}")'
+
+            typ, msgnums = self.connection.search(None, search_criteria)
+
+            if typ != 'OK':
+                return 0
+
+            # Contar correos encontrados
+            if msgnums[0]:
+                return len(msgnums[0].split())
+            else:
+                return 0
+
+        except Exception:
+            return 0
+
+    def _get_email_details_by_subject(self, search_title, days_back=30, limit=10):
+        """
+        MÉTODO LEGACY - Obtiene detalles de correos por título/asunto (búsqueda exacta)
+        Mantenido por compatibilidad, pero se recomienda usar _get_email_details_by_subject_flexible
+        """
+        emails = []
+
+        try:
+            if not self.connection:
+                return emails
+
+            # Calcular fecha de inicio
+            start_date = datetime.now() - timedelta(days=days_back)
+            date_str = start_date.strftime("%d-%b-%Y")
+
+            # Buscar correos (MÉTODO ORIGINAL)
             search_criteria = f'(SUBJECT "{search_title}" SINCE "{date_str}")'
             typ, msgnums = self.connection.search(None, search_criteria)
 
@@ -337,7 +487,7 @@ class EmailSearchService:
                     # Extraer información básica
                     subject = self._decode_mime_words(email_message.get("Subject", ""))
                     sender = self._decode_mime_words(email_message.get("From", ""))
-                    date_str = email_message.get("Date", "")
+                    date_str_email = email_message.get("Date", "")
 
                     # Limpiar strings
                     subject = self._clean_string(subject)
@@ -346,7 +496,7 @@ class EmailSearchService:
                     email_info = {
                         "subject": subject,
                         "sender": sender,
-                        "date": date_str,
+                        "date": date_str_email,
                         "message_id": msg_num.decode() if isinstance(msg_num, bytes) else str(msg_num)
                     }
 

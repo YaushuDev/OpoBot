@@ -1,7 +1,7 @@
 # services/profile_service.py
 """
-Servicio para gestión de perfiles de búsqueda de correos.
-Maneja la creación, edición, eliminación y persistencia de perfiles.
+Servicio para gestión de perfiles de búsqueda de correos con soporte para búsqueda aproximada.
+Maneja la creación, edición, eliminación y persistencia de perfiles con criterios flexibles.
 """
 
 import json
@@ -29,11 +29,11 @@ class ProfileService:
 
     def create_profile(self, name, search_title):
         """
-        Crea un nuevo perfil de búsqueda
+        Crea un nuevo perfil de búsqueda con soporte para criterios flexibles
 
         Args:
             name (str): Nombre del perfil
-            search_title (str): Título/criterio de búsqueda
+            search_title (str): Título/criterio de búsqueda (soporta espacios y búsqueda aproximada)
 
         Returns:
             str: ID del perfil creado
@@ -47,17 +47,27 @@ class ProfileService:
                 raise Exception("El nombre del perfil no puede estar vacio")
 
             if not search_title or not search_title.strip():
-                raise Exception("El titulo de busqueda no puede estar vacio")
+                raise Exception("El criterio de busqueda no puede estar vacio")
 
             # Limpiar datos
             clean_name = self._clean_string(name.strip())
             clean_search_title = self._clean_string(search_title.strip())
 
+            # Validaciones mejoradas para criterios flexibles
             if len(clean_name) < 2:
                 raise Exception("El nombre del perfil debe tener al menos 2 caracteres")
 
-            if len(clean_search_title) < 2:
-                raise Exception("El criterio de busqueda debe tener al menos 2 caracteres")
+            if not self._validate_search_criteria(clean_search_title):
+                raise Exception(
+                    "El criterio de busqueda no es valido.\n\n"
+                    "EJEMPLOS VALIDOS:\n"
+                    "• Palabra simple: 'Factura'\n"
+                    "• Frase completa: 'Reporte Automatico de PDFs'\n"
+                    "• Multiples palabras: 'Pedido Confirmacion'\n"
+                    "• Con caracteres especiales: 'Re: Importante'\n\n"
+                    "NOTA: Ahora soporta busqueda aproximada - encontrara correos que "
+                    "contengan TODAS las palabras del criterio, aunque tengan texto adicional."
+                )
 
             # Cargar perfiles existentes
             profiles = self.load_profiles()
@@ -74,10 +84,11 @@ class ProfileService:
                 "id": profile_id,
                 "name": clean_name,
                 "search_title": clean_search_title,
+                "search_type": "flexible",  # Nuevo campo para indicar tipo de búsqueda
                 "created_at": datetime.now().isoformat(),
                 "last_executed": None,
                 "is_active": True,
-                "version": "1.0"
+                "version": "1.1"  # Versión actualizada para búsqueda flexible
             }
 
             # Agregar a la lista
@@ -99,7 +110,7 @@ class ProfileService:
 
     def update_profile(self, profile_id, name=None, search_title=None, is_active=None):
         """
-        Actualiza un perfil existente
+        Actualiza un perfil existente con soporte para criterios flexibles
 
         Args:
             profile_id (str): ID del perfil
@@ -150,12 +161,24 @@ class ProfileService:
                 clean_search_title = self._clean_string(search_title.strip()) if search_title.strip() else ""
 
                 if not clean_search_title:
-                    raise Exception("El titulo de busqueda no puede estar vacio")
+                    raise Exception("El criterio de busqueda no puede estar vacio")
 
-                if len(clean_search_title) < 2:
-                    raise Exception("El criterio de busqueda debe tener al menos 2 caracteres")
+                if not self._validate_search_criteria(clean_search_title):
+                    raise Exception(
+                        "El criterio de busqueda no es valido.\n\n"
+                        "EJEMPLOS VALIDOS:\n"
+                        "• Palabra simple: 'Factura'\n"
+                        "• Frase completa: 'Reporte Automatico de PDFs'\n"
+                        "• Multiples palabras: 'Pedido Confirmacion'\n"
+                        "• Con caracteres especiales: 'Re: Importante'\n\n"
+                        "NOTA: Soporta busqueda aproximada - encontrara correos que "
+                        "contengan TODAS las palabras del criterio."
+                    )
 
                 profiles[profile_index]["search_title"] = clean_search_title
+                # Actualizar a búsqueda flexible si es perfil antiguo
+                profiles[profile_index]["search_type"] = "flexible"
+                profiles[profile_index]["version"] = "1.1"
 
             if is_active is not None:
                 profiles[profile_index]["is_active"] = bool(is_active)
@@ -171,6 +194,84 @@ class ProfileService:
         except Exception as e:
             error_msg = self._clean_string(str(e))
             raise Exception(f"Error actualizando perfil: {error_msg}")
+
+    def _validate_search_criteria(self, search_title):
+        """
+        Valida criterios de búsqueda para búsqueda flexible
+
+        Args:
+            search_title (str): Criterio a validar
+
+        Returns:
+            bool: True si es válido
+        """
+        try:
+            if not search_title or len(search_title.strip()) < 2:
+                return False
+
+            # Limpiar y analizar el criterio
+            clean_title = search_title.strip()
+
+            # Criterios básicos de validación
+            if len(clean_title) > 200:  # Límite razonable
+                return False
+
+            # Verificar que tenga al menos una palabra útil
+            words = [word.strip() for word in clean_title.split() if len(word.strip()) >= 1]
+
+            if not words:
+                return False
+
+            # Verificar que no sea solo caracteres especiales
+            useful_chars = ''.join(words).replace(' ', '')
+            if len(useful_chars.strip('.,;:!?-_()[]{}"\' ')) < 1:
+                return False
+
+            # Validaciones adicionales para caracteres problemáticos
+            # Permitir la mayoría de caracteres pero excluir algunos problemáticos para IMAP
+            forbidden_chars = ['\\', '\n', '\r', '\t']
+            for char in forbidden_chars:
+                if char in clean_title:
+                    return False
+
+            return True
+
+        except Exception:
+            return False
+
+    def get_search_criteria_examples(self):
+        """
+        Obtiene ejemplos de criterios de búsqueda válidos
+
+        Returns:
+            dict: Ejemplos organizados por categoría
+        """
+        return {
+            "palabras_simples": [
+                "Factura",
+                "Pedido",
+                "Confirmacion",
+                "Reporte"
+            ],
+            "frases_completas": [
+                "Reporte Automatico de PDFs",
+                "Factura Mensual",
+                "Pedido Confirmacion",
+                "Estado de Cuenta"
+            ],
+            "con_caracteres_especiales": [
+                "Re: Importante",
+                "[URGENTE] Notificacion",
+                "Fwd: Documentos",
+                "Auto: Confirmado"
+            ],
+            "multiples_palabras": [
+                "Resumen Ejecutivo Mensual",
+                "Backup Completado Exitosamente",
+                "Informe Ventas Trimestre",
+                "Proceso Automatico Finalizado"
+            ]
+        }
 
     def delete_profile(self, profile_id):
         """
@@ -229,6 +330,10 @@ class ProfileService:
             profiles = self.load_profiles()
             for profile in profiles:
                 if profile.get("id") == profile_id:
+                    # Migrar perfiles antiguos a nueva versión si es necesario
+                    if "search_type" not in profile:
+                        profile["search_type"] = "flexible"
+                        profile["version"] = "1.1"
                     return profile
             return None
         except Exception:
@@ -257,7 +362,7 @@ class ProfileService:
                 print(f"Archivo de perfiles corrupto: esperaba lista, encontró {type(profiles)}")
                 return []
 
-            # Limpiar strings de caracteres problemáticos
+            # Limpiar strings de caracteres problemáticos y migrar perfiles antiguos
             cleaned_profiles = []
             for profile in profiles:
                 if isinstance(profile, dict) and "id" in profile:
@@ -267,6 +372,13 @@ class ProfileService:
                             cleaned_profile[key] = self._clean_string(value)
                         else:
                             cleaned_profile[key] = value
+
+                    # Migrar perfiles antiguos a nueva versión
+                    if "search_type" not in cleaned_profile:
+                        cleaned_profile["search_type"] = "flexible"
+                    if "version" not in cleaned_profile:
+                        cleaned_profile["version"] = "1.1"
+
                     cleaned_profiles.append(cleaned_profile)
 
             return cleaned_profiles
@@ -440,6 +552,9 @@ class ProfileService:
             total_emails_accumulated = 0
             total_executions = 0
 
+            # Contar perfiles con búsqueda flexible
+            flexible_profiles = sum(1 for p in profiles if p.get("search_type") == "flexible")
+
             for stat in stats.values():
                 total_emails_current += stat.get("current_emails_found", stat.get("total_emails_found", 0))
                 total_emails_accumulated += stat.get("total_emails_accumulated", stat.get("total_emails_found", 0))
@@ -449,6 +564,7 @@ class ProfileService:
                 "total_profiles": len(profiles),
                 "active_profiles": active_count,
                 "inactive_profiles": inactive_count,
+                "flexible_profiles": flexible_profiles,
                 "total_executions": total_executions,
                 "current_emails_found": total_emails_current,
                 "total_emails_accumulated": total_emails_accumulated
@@ -458,6 +574,7 @@ class ProfileService:
                 "total_profiles": 0,
                 "active_profiles": 0,
                 "inactive_profiles": 0,
+                "flexible_profiles": 0,
                 "total_executions": 0,
                 "current_emails_found": 0,
                 "total_emails_accumulated": 0
@@ -481,7 +598,8 @@ class ProfileService:
                 "profiles": profiles,
                 "stats": stats,
                 "export_date": datetime.now().isoformat(),
-                "version": "1.0"
+                "version": "1.1",  # Versión con búsqueda flexible
+                "features": ["flexible_search", "approximate_matching"]
             }
 
             with open(export_path, "w", encoding="utf-8") as f:
@@ -515,6 +633,13 @@ class ProfileService:
 
             imported_profiles = import_data["profiles"]
             imported_stats = import_data.get("stats", {})
+
+            # Migrar perfiles importados a nueva versión si es necesario
+            for profile in imported_profiles:
+                if "search_type" not in profile:
+                    profile["search_type"] = "flexible"
+                if "version" not in profile:
+                    profile["version"] = "1.1"
 
             if merge:
                 existing_profiles = self.load_profiles()
