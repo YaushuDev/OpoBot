@@ -4,8 +4,6 @@ Punto de entrada principal del Bot de Python con interfaz tkinter.
 Inicializa y ejecuta la ventana principal con gestión de perfiles y programación automática.
 """
 
-# Archivos relacionados: gui/main_window.py
-
 import tkinter as tk
 import sys
 from pathlib import Path

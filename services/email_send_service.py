@@ -4,8 +4,6 @@ Servicio para envío de correos con adjuntos de reportes Excel.
 Maneja el envío automático de reportes generados por correo electrónico.
 """
 
-# Archivos relacionados: services/config_service.py, services/excel_service.py
-
 import smtplib
 import socket
 from email.mime.text import MIMEText

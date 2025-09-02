@@ -4,8 +4,6 @@ Servicio para generación de reportes en formato Excel.
 Crea archivos Excel con estadísticas de perfiles y ejecuciones de búsqueda.
 """
 
-# Archivos relacionados: services/profile_service.py
-
 from datetime import datetime
 from pathlib import Path
 

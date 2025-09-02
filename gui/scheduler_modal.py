@@ -4,8 +4,6 @@ Modal para configuración de búsquedas automáticas programadas.
 Permite configurar horarios, intervalos y días para ejecutar búsquedas automáticamente.
 """
 
-# Archivos relacionados: services/scheduler_service.py, services/config_service.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading

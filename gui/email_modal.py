@@ -4,8 +4,6 @@ Modal para configuración de credenciales SMTP.
 Permite ingresar datos de email, probar conexión y guardar credenciales.
 """
 
-# Archivos relacionados: services/email_service.py, services/config_service.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading

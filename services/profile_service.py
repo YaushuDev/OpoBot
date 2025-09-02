@@ -4,8 +4,6 @@ Servicio para gestión de perfiles de búsqueda de correos.
 Maneja la creación, edición, eliminación y persistencia de perfiles.
 """
 
-# Archivos relacionados: services/config_service.py, services/email_search_service.py
-
 import json
 import uuid
 from pathlib import Path

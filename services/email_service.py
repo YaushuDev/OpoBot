@@ -4,8 +4,6 @@ Servicio dedicado a manejar conexiones SMTP y pruebas de conectividad.
 Proporciona métodos para probar y validar configuraciones de email.
 """
 
-# Archivos relacionados: Ninguno (servicio independiente)
-
 import smtplib
 import socket
 from email.mime.text import MIMEText

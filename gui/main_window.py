@@ -4,8 +4,6 @@ Ventana principal de la aplicación con diseño de 3 secciones.
 Maneja la interfaz principal con gestión de perfiles, configuraciones, reportes y envío automático.
 """
 
-# Archivos relacionados: gui/email_modal.py, gui/profile_manager.py, gui/email_send_modal.py, services/excel_service.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading

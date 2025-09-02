@@ -4,8 +4,6 @@ Servicio para programación automática de búsquedas de correos con envío auto
 Maneja la configuración de horarios, intervalos, ejecución automática y envío por correo de reportes Excel.
 """
 
-# Archivos relacionados: services/config_service.py, services/email_search_service.py, services/profile_service.py, services/excel_service.py, services/email_send_service.py
-
 import json
 import threading
 import time

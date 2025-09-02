@@ -4,8 +4,6 @@ Servicio para búsqueda de correos usando perfiles de búsqueda.
 Conecta con cuentas de email y busca correos basado en criterios definidos.
 """
 
-# Archivos relacionados: services/email_service.py, services/profile_service.py, services/config_service.py
-
 import imaplib
 import email
 import socket

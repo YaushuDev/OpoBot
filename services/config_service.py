@@ -4,8 +4,6 @@ Servicio para manejo de persistencia de configuraciones en formato JSON.
 Guarda y carga credenciales de manera segura con cifrado básico y configuración de envío de reportes.
 """
 
-# Archivos relacionados: Ninguno (servicio independiente)
-
 import json
 import base64
 from pathlib import Path

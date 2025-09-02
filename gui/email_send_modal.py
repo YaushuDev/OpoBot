@@ -4,8 +4,6 @@ Modal para configuración de parámetros de envío de reportes por correo.
 Permite configurar destinatario, asunto, CC para envío automático de reportes Excel.
 """
 
-# Archivos relacionados: services/email_send_service.py, services/config_service.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading

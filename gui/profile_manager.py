@@ -4,8 +4,6 @@ Interfaz gráfica para gestión de perfiles de búsqueda con programación autom
 Permite crear, editar, eliminar perfiles y configurar búsquedas automáticas programadas.
 """
 
-# Archivos relacionados: services/profile_service.py, services/email_search_service.py, services/config_service.py, services/scheduler_service.py, gui/scheduler_modal.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
